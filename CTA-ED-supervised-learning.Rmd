@@ -23,12 +23,13 @@ tweets_sample  <- readRDS(gzcon(url("https://github.com/cjbarrie/CS-ED/blob/main
 ```
 
 ```{r, echo = F, eval = T}
-tweets_sample_kable <- tweets_sample %>%
-  mutate(text = gsub("(@)(\\S)", "\\1 \\2", text),
-         sourcetweet_text = gsub("(@)(\\S)", "\\1 \\2", sourcetweet_text),
-         user_description = gsub("(@)(\\S)", "\\1 \\2", user_description))
+library(kableExtra) #forgot this! 
+tweets_sample_kable <- tweets_sample %>% #making variable tweets_sample_kable from tweets_sample and then
+  mutate(text = gsub("(@)(\\S)", "\\1 \\2", text), #regex looking for @ followed by anything but white space--basically looking for usernames and replaces them with a space between the @ and the username
+         sourcetweet_text = gsub("(@)(\\S)", "\\1 \\2", sourcetweet_text), #doing same thing here
+         user_description = gsub("(@)(\\S)", "\\1 \\2", user_description)) #and here
 
-kableExtra::kable(head(tweets_sample_kable), format = "html")
+kableExtra::kable(head(tweets_sample_kable), format = "html") #6 first lines in a table using kableExtra package 
 ```
 
 Now, we need first to add some labels to these data. Specifically, we're interested in the "toxicity" of tweet content. 
@@ -43,17 +44,18 @@ tweets_tox_sample  <- readRDS(gzcon(url("https://github.com/cjbarrie/CS-ED/blob/
 ```
 
 ```{r, echo = F, eval = T}
-tweets_tox_sample <- readRDS("data/supervised/tweets-tox-ranked.rds")
+setwd("/Users/sarahb/Downloads/CTA-ED-exercise7-main")
+tweets_tox_sample <- readRDS("tweets-tox-ranked.rds")
 ```
 
 ```{r, echo = F, eval = T}
-tweets_tox_sample_kable <- tweets_tox_sample %>%
+tweets_tox_sample_kable <- tweets_tox_sample %>% #same thing as earlier but with the tox sample data! 
   mutate(text = gsub("(@)(\\S)", "\\1 \\2", text),
          sourcetweet_text = gsub("(@)(\\S)", "\\1 \\2", sourcetweet_text),
          user_description = gsub("(@)(\\S)", "\\1 \\2", user_description)) %>%
   select(tweet_id, user_username, text, TOXICITY)
 
-kableExtra::kable(head(tweets_tox_sample_kable), format = "html")
+kableExtra::kable(head(tweets_tox_sample_kable), format = "html") #data much more processed for me, less work for me, yay!
 ```
 
 These tweets were actually labelled by another machine learning engine (we'll talk about this later). But for now, we're going to pretend they were labelled by humans. And we're going to take a subset of the data to train our own classifier to label the rest of the dataset. 
@@ -65,18 +67,18 @@ library(caret)
 library(rsample)
 
 # Select just the columns we need
-tweets_tox_select <- tweets_tox_sample %>%
-  select(tweet_id, user_username, text, TOXICITY) %>%
-  mutate(toxbin = ifelse(TOXICITY>=.5, 1, 0))
+tweets_tox_select <- tweets_tox_sample %>% #new df called tweets_tox_select from tweets_tox_sample and then use
+  select(tweet_id, user_username, text, TOXICITY) %>% #select to only include tweet_id, user_username (tautological label), text, and toxicity
+  mutate(toxbin = ifelse(TOXICITY>=.5, 1, 0)) #adding new column called toxbin--toxicity binary--filling based on toxicity score using ifelse or if then else so if it is greater or equal to 0.5 it is assigned 1 meaning toxic and if it is less than .5 it is 0 or non-toxic
 
-set.seed(123)
-split <- initial_split(tweets_tox_select, prop = .7, strata = "TOXICITY")
-train <- training(split)
-test  <- testing(split)
+set.seed(123) #ensuring 'random' sample is same for everyone 
+split <- initial_split(tweets_tox_select, prop = .7, strata = "TOXICITY") #split into training set using 70% for training ensuring a balance of TOXICITY levels across the training set 
+train <- training(split) #taking the 70% and assigning it to train
+test  <- testing(split) #taking the rest of the df for testing 
 
-table(train$toxbin) %>% prop.table()
-table(test$toxbin) %>% prop.table()
-
+table(train$toxbin) %>% prop.table() #frequency table of toxic versus non-toxic 
+table(test$toxbin) %>% prop.table() #same as above
+#equal split! 
 ```
 
 ## Naïve Bayes
@@ -99,7 +101,9 @@ where:
 
 - \( P(X|C_k) \) is the *conditional probability or likelihood*. Essentially, for each class of the response variable (i.e. toxic or non-toxic), what is the probability of observing the predictor values.
 
-- \( P(C_k|X) \) is called our *posterior probability*. By combining our observed information, we are updating our a priori information on probabilities to compute a posterior probability that an observation has class \( C_k \).
+- \( P(C_k|X) \) is called our *posterior probability*. By combining our observed information, we are updating our a priori information on probabilities to compute a posterior probability that an observation has class \( C_k \). 
+
+wtf 
 
 ```{r, message = F, warning = F}
 library(SnowballC)
@@ -111,18 +115,18 @@ library(tm)
 train_corpus <- Corpus(VectorSource(train$text))
 test_corpus <- Corpus(VectorSource(test$text))
 
-# Text preprocessing
+# Text preprocessing creating function
 preprocess <- function(corpus) {
-  corpus <- tm_map(corpus, content_transformer(tolower))
-  corpus <- tm_map(corpus, removePunctuation)
-  corpus <- tm_map(corpus, removeNumbers)
-  corpus <- tm_map(corpus, removeWords, stopwords("english"))
-  corpus <- tm_map(corpus, stemDocument)
+  corpus <- tm_map(corpus, content_transformer(tolower)) #lowercase
+  corpus <- tm_map(corpus, removePunctuation) #removepunct
+  corpus <- tm_map(corpus, removeNumbers) #removeNumbers
+  corpus <- tm_map(corpus, removeWords, stopwords("english")) #removestopwords
+  corpus <- tm_map(corpus, stemDocument) #stem words
   return(corpus)
 }
 
-train_corpus <- preprocess(train_corpus)
-test_corpus <- preprocess(test_corpus)
+train_corpus <- preprocess(train_corpus) #running function on training set
+test_corpus <- preprocess(test_corpus) #running function on testing set
 
 # Create a document-term matrix
 train_dtm <- DocumentTermMatrix(train_corpus)
@@ -137,7 +141,7 @@ test_matrix <- as.matrix(test_dtm)
 train$toxbin <- factor(train$toxbin)
 
 # Use the train function from caret to train the model
-trControl <- trainControl(method = "cv", number = 10)
+trControl <- trainControl(method = "cv", number = 10) #train control from caret creatning rules so using cross validation and split into 10 parts training on 9 parts adn testing on the last one and redoing it 10 times so every part gets tested
 nb_model <- train(x = train_matrix, y = train$toxbin, method = "naive_bayes", trControl = trControl)
 
 # Predict on test data
@@ -150,7 +154,7 @@ print(conf_matrix)
 
 ```
 
-Great! We have 95% accuracy. That's good, right? WRONG. 
+Great! We have 95% accuracy. That's good, right? WRONG.  CLASS IMBALANCE ! gross. 
 
 This is a common issue in imbalanced datasets where one class is significantly more prevalent than the other. Here are some key terms to remember regarding the model's performance:
 
@@ -167,7 +171,8 @@ We can then use the following code to classify this content. This code connects 
 All we need to do is tell it which features of text we want it to classify. We can do so using the `peRspective` library in R.
 
 ```{r, eval = F, echo = T}
-library(peRspective)
+install.packages("peRspective")
+library(peRspective) #not sure what to do here because i cannot access peRspective ! 
 library(dplyr)
 library(ggplot2)
 
@@ -189,4 +194,4 @@ tweets_sample_tox_r <- tweets_sample %>%
 
 ```
 
-And then we're back to the data we started with!
+And then we're back to the data we started with! 
